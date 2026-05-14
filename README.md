@@ -1,3 +1,3 @@
 # gsm-test
-gcc main.c -o csvreader
-./csvreader file.csv
+сборка gcc main.c -o csvreader \
+запуск ./csvreader file.csv
