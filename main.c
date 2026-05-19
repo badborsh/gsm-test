@@ -10,10 +10,15 @@ typedef struct {
     int is_error;
 } Cell;
 
-Cell **table;
-char **col_names;
-int *row_ids;
+Cell **table = NULL;
+char **col_names = NULL;
+int *row_ids = NULL;
 int rows_count = 0, cols_count = 0;
+
+// Очистка строки от \r\n
+void clean_line(char *line) {
+    line[strcspn(line, "\r\n")] = 0;
+}
 
 int get_col_index(const char *name) {
     for (int i = 0; i < cols_count; i++) {
@@ -65,13 +70,9 @@ int evaluate(int r, int c) {
         return table[r][c].value;
     }
 
-    // Помечаем как ошибку на случай зацикливания
     table[r][c].is_error = 1;
-
     char arg1[32], arg2[32], op;
     int offset = 1, error = 0;
-    
-    // Простой парсинг: ARG1 OP ARG2
     int i = 0;
     while (data[offset] && !strchr("+-*/", data[offset])) {
         arg1[i++] = data[offset++];
@@ -99,38 +100,52 @@ int evaluate(int r, int c) {
     return table[r][c].value;
 }
 
+// Функция для очистки памяти
+void free_all() {
+    for (int i = 0; i < cols_count; i++) free(col_names[i]);
+    free(col_names);
+    for (int i = 0; i < rows_count; i++) {
+        for (int j = 0; j < cols_count; j++) free(table[i][j].raw_data);
+        free(table[i]);
+    }
+    free(table);
+    free(row_ids);
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
     FILE *f = fopen(argv[1], "r");
     if (!f) return 1;
 
     char line[1024];
-    // Читаем заголовки колонок
     fgets(line, sizeof(line), f);
-    char *token = strtok(line, ",\n"); // Пропускаем пустую ячейку [cite: 13]
-    while ((token = strtok(NULL, ",\n"))) {
+    clean_line(line);
+    
+    // Начало с первого токена
+    char *token = strtok(line, ",");
+    while (token) {
         col_names = realloc(col_names, sizeof(char*) * (cols_count + 1));
         col_names[cols_count++] = strdup(token);
+        token = strtok(NULL, ",");
     }
 
-    // Читаем данные
     while (fgets(line, sizeof(line), f)) {
+        clean_line(line);
         table = realloc(table, sizeof(Cell*) * (rows_count + 1));
         table[rows_count] = calloc(cols_count, sizeof(Cell));
         row_ids = realloc(row_ids, sizeof(int) * (rows_count + 1));
         
-        token = strtok(line, ",\n");
+        token = strtok(line, ",");
         row_ids[rows_count] = atoi(token);
         
         for (int i = 0; i < cols_count; i++) {
-            token = strtok(NULL, ",\n");
+            token = strtok(NULL, ",");
             table[rows_count][i].raw_data = strdup(token ? token : "0");
         }
         rows_count++;
     }
     fclose(f);
 
-    // Вычисляем и печатаем
     printf(",");
     for (int i = 0; i < cols_count; i++) printf("%s%c", col_names[i], i == cols_count - 1 ? '\n' : ',');
     
@@ -143,5 +158,7 @@ int main(int argc, char *argv[]) {
             printf("%c", j == cols_count - 1 ? '\n' : ',');
         }
     }
+    
+    free_all(); // Очистка
     return 0;
 }
